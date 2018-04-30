@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 	"sync"
-	"time"
 )
 
 type Point struct {
@@ -71,30 +70,6 @@ func (g *Grid) Add(id int, x int64, y int64) error {
 	g.allPoints[id] = &newPoint
 	g.mtx.Unlock()
 	return nil
-}
-
-// AddWithoutID should only be used in extreme circumstances. Use the Add() func
-// instead whilst keeping track of IDs externally to avoid the performance penalty.
-func (g *Grid) AddWithoutID(x, y int64) (id int, err error) {
-	g.mtx.Lock()
-	defer g.mtx.Unlock()
-	if g.rnum == nil {
-		timeInt := time.Now().UnixNano()
-		g.rnum = rand.New(rand.NewSource(timeInt))
-	}
-	for i := 0; i < math.MaxInt16; i++ {
-		id = g.rnum.Int()
-		_, exists := g.allPoints[id]
-		if exists {
-			continue
-		}
-		xb, yb := calculateBucket(x, y, g.rows, g.columns)
-		newPoint := Point{id, x, y}
-		g.buckets[xb][yb] = append(g.buckets[xb][yb], newPoint)
-		g.allPoints[id] = &newPoint
-		return id, nil
-	}
-	return -1, errors.New("could not find an id")
 }
 
 func (g *Grid) Move(id int, x int64, y int64) error {

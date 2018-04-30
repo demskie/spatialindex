@@ -12,15 +12,6 @@ func TestGrid(t *testing.T) {
 	grid.Add(2, 123456789, 123456789)
 	grid.Add(3, 123456788, 123456788)
 	grid.ClosestNeighbor(-123456789, -123456789)
-	val, err := grid.AddWithoutID(183, 123)
-	for i := 0; i < 4; i++ {
-		if val == i {
-			t.Errorf("AddWithoutID returned the wrong value: %v\n", val)
-		}
-	}
-	if err != nil {
-		t.Error(err)
-	}
 }
 
 func BenchmarkGridCreation(b *testing.B) {
