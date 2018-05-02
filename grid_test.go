@@ -1,6 +1,7 @@
 package spatialindex
 
 import "testing"
+import "math"
 
 func TestGrid(t *testing.T) {
 	grid := NewGrid(1000, 1000)
@@ -12,11 +13,17 @@ func TestGrid(t *testing.T) {
 	grid.Add(2, 123456789, 123456789)
 	grid.Add(3, 123456788, 123456788)
 	grid.ClosestNeighbor(-123456789, -123456789)
+	grid.Add(4, math.MaxInt64/2, math.MinInt64/2)
+	err := grid.Add(5, math.MaxInt64, math.MinInt64)
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 func BenchmarkGridCreation(b *testing.B) {
+	grid := NewGrid(1000, 1000)
 	for i := 0; i < b.N; i++ {
-		NewGrid(1000, 1000)
+		grid.Reset()
 	}
 }
 
@@ -35,7 +42,7 @@ func BenchmarkGridNeighbor(b *testing.B) {
 
 func BenchmarkGridMutation(b *testing.B) {
 	grid := NewGrid(1000, 1000)
-	for i := 0; i < b.N; i++ {
-		grid.Add(i, int64(i*1000), int64(i*1000))
+	for i := int64(0); i < int64(b.N); i++ {
+		grid.Add(i, i*1000, i*1000)
 	}
 }

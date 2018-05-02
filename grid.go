@@ -3,32 +3,32 @@ package spatialindex
 import (
 	"errors"
 	"math"
-	"math/rand"
 	"sync"
+	//"fmt"
 )
 
 type Point struct {
-	ID   int
-	X, Y int64
+	ID, X, Y   int64
 }
 
 type Grid struct {
 	mtx       *sync.RWMutex
-	rows      int
-	columns   int
+	rows      int64
+	columns   int64
 	buckets   [][][]Point
-	allPoints map[int]*Point
-	rnum      *rand.Rand
+	allPoints map[int64]*Point
 }
 
-func NewGrid(rows, columns int) *Grid {
+func NewGrid(rows, columns int64) *Grid {
+	if rows < 2 || columns < 2 {
+		return nil
+	}
 	g := &Grid{
 		mtx:       &sync.RWMutex{},
 		rows:      rows,
 		columns:   columns,
 		buckets:   make([][][]Point, rows),
-		allPoints: make(map[int]*Point, rows*columns),
-		rnum:      nil,
+		allPoints: make(map[int64]*Point, rows*columns),
 	}
 	for x := range g.buckets {
 		g.buckets[x] = make([][]Point, rows)
@@ -39,30 +39,19 @@ func NewGrid(rows, columns int) *Grid {
 	return g
 }
 
-func calculateBucket(x int64, y int64, rows int, columns int) (xb, yb int) {
-	xb = columns / 2
-	if x > 0 {
-		xb += int(x / (math.MaxInt64 / int64(columns)))
-	} else if x < 0 {
-		xb += int(x / (math.MaxInt64 / int64(columns)))
-		xb--
-	}
-	yb = rows / 2
-	if y > 0 {
-		yb += int(y / (math.MaxInt64 / int64(rows)))
-	} else if x < 0 {
-		yb += int(y / (math.MaxInt64 / int64(rows)))
-		yb--
-	}
+func calculateBucket(x, y, rows, columns int64) (xb, yb int64) {
+	xb, yb = columns/2, rows/2
+	xb += x / (2 * (1+(math.MaxInt64 / columns)))
+	yb += y / (2 * (1+(math.MaxInt64 / rows)))
 	return xb, yb
 }
 
-func (g *Grid) Add(id int, x int64, y int64) error {
+func (g *Grid) Add(id, x, y int64) error {
 	g.mtx.Lock()
 	_, exists := g.allPoints[id]
 	if exists {
 		g.mtx.Unlock()
-		return errors.New("id parameter is not valid as it already exists")
+		return errors.New("id already exists")
 	}
 	xb, yb := calculateBucket(x, y, g.rows, g.columns)
 	newPoint := Point{id, x, y}
@@ -72,12 +61,66 @@ func (g *Grid) Add(id int, x int64, y int64) error {
 	return nil
 }
 
-func (g *Grid) Move(id int, x int64, y int64) error {
+func (g *Grid) Move(id, x, y int64) error {
+	g.mtx.Lock()
+	point, exists := g.allPoints[id]
+	if !exists {
+		g.mtx.Unlock()
+		return errors.New("id does not exist")
+	}
+	if point.X == x && point.Y == y {
+		g.mtx.Unlock()
+		return nil
+	}
+	xb1, yb1 := calculateBucket(point.X, point.Y, g.rows, g.columns)
+	xb2, yb2 := calculateBucket(x, y, g.rows, g.columns)
+	if xb1 != xb2 || yb1 != yb2 {
+		for i := range g.buckets[xb1][yb1] {
+			if g.buckets[xb1][yb1][i].ID == point.ID {
+				g.buckets[xb1][yb1] = append(g.buckets[xb1][yb1][:i],
+					g.buckets[xb1][yb1][i+1:]...)
+				break
+			}
+		}
+		newPoint := Point{id, x, y}
+		g.buckets[xb2][yb2] = append(g.buckets[xb2][yb2], newPoint)
+		g.allPoints[id] = &newPoint
+	}
+	g.mtx.Unlock()
 	return nil
 }
 
-func (g *Grid) Delete(id int) error {
+func (g *Grid) Delete(id int64) error {
+	g.mtx.Lock()
+	point, exists := g.allPoints[id]
+	if !exists {
+		g.mtx.RUnlock()
+		return errors.New("id does not exist")
+	}
+	xb, yb := calculateBucket(point.X, point.Y, g.rows, g.columns)
+	for i := range g.buckets[xb][yb] {
+		if g.buckets[xb][yb][i].ID == id {
+			g.buckets[xb][yb] = append(g.buckets[xb][yb][:i],
+				g.buckets[xb][yb][i+1:]...)
+			break
+		}
+	}
+	delete(g.allPoints, id)
+	g.mtx.Unlock()
 	return nil
+}
+
+func (g *Grid) Reset() {
+	g.mtx.Lock()
+	for x := range g.buckets {
+		for y := range g.buckets[x] {
+			if len(g.buckets[x][y]) != 0 {
+				g.buckets[x][y] = g.buckets[x][y][:0]
+			}
+		}
+	}
+	g.allPoints = map[int64]*Point{}
+	g.mtx.Unlock()
 }
 
 const (
@@ -98,7 +141,7 @@ const (
 	tooHigh
 )
 
-func adjustBucket(side, xb, yb, distance, rows, columns int) (int, int, int) {
+func adjustBucket(side, xb, yb, distance, rows, columns int64) (int64, int64, int64) {
 	switch side {
 	case center:
 		// do nothing
@@ -126,22 +169,23 @@ func adjustBucket(side, xb, yb, distance, rows, columns int) (int, int, int) {
 		panic("InvalidParameter")
 	}
 	if xb < 0 || yb < 0 {
-		return math.MinInt32, math.MinInt32, tooLow
+		return math.MinInt64, math.MinInt64, tooLow
 	}
-	if xb > columns || yb > rows {
-		return math.MaxInt32, math.MaxInt32, tooHigh
+	if xb >= columns || yb >= rows {
+		return math.MaxInt64, math.MaxInt64, tooHigh
 	}
 	return xb, yb, valid
 }
 
-func (g *Grid) ClosestNeighbor(x int64, y int64) (Point, error) {
+func (g *Grid) ClosestNeighbor(x, y int64) (Point, error) {
+	g.mtx.RLock()
 	var (
-		xb, yb, side, state        int
+		xb, yb, side, state        int64
 		point, bestPoint           *Point
 		hypotenuse, bestHypotenuse float64
 	)
 	xbStart, ybStart := calculateBucket(x, y, g.rows, g.columns)
-	for distance := 1; distance < math.MaxInt32; distance++ {
+	for distance := int64(1); distance < math.MaxInt64; distance++ {
 		for side = 0; side < 9; side++ {
 			if side == 0 && distance != 1 {
 				continue
@@ -160,8 +204,10 @@ func (g *Grid) ClosestNeighbor(x int64, y int64) (Point, error) {
 			}
 		}
 		if bestPoint != nil {
+			g.mtx.RUnlock()
 			return *bestPoint, nil
 		}
 	}
+	g.mtx.RUnlock()
 	return Point{}, errors.New("nothing found")
 }
