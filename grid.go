@@ -235,6 +235,7 @@ func insertPointIntoOrderedList(p *Point, h float64, bestPoints []Point, bestHyp
 }
 
 func (g *Grid) getClosestPoints(originPoint *Point, number int64) []Point {
+	panic("doesn't work!")
 	var (
 		otherPoint          *Point
 		xb, yb, side, state int64
@@ -262,7 +263,8 @@ func (g *Grid) getClosestPoints(originPoint *Point, number int64) []Point {
 				}
 				hypotenuse = math.Hypot(float64(originPoint.X-otherPoint.X),
 					float64(originPoint.Y-otherPoint.Y))
-				insertPointIntoOrderedList(otherPoint, hypotenuse, bestPoints, bestHypotenuses)
+				bestPoints, bestHypotenuses = insertPointIntoOrderedList(otherPoint, hypotenuse,
+					bestPoints, bestHypotenuses)
 			}
 		}
 		if bestPoints[number-1].ID != -1 {
