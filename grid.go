@@ -3,6 +3,7 @@ package spatialindex
 import (
 	"errors"
 	"math"
+	"sort"
 	"sync"
 	//"fmt"
 )
@@ -28,9 +29,6 @@ func NewGrid(numberOfSquares int32) *Grid {
 	}
 	for x := range g.buckets {
 		g.buckets[x] = make([][]Point, len(g.buckets))
-		for y := range g.buckets[x] {
-			g.buckets[x][y] = []Point{}
-		}
 	}
 	return g
 }
@@ -134,13 +132,7 @@ const (
 	bottomRight
 )
 
-const (
-	isValid = iota
-	tooLow
-	tooHigh
-)
-
-func adjustBucket(side, xb, yb, distance, diameter int64) (int64, int64, int64) {
+func adjustBucket(side, xb, yb, distance, diameter int64) (int64, int64, bool) {
 	switch side {
 	case center:
 		// do nothing
@@ -168,18 +160,19 @@ func adjustBucket(side, xb, yb, distance, diameter int64) (int64, int64, int64) 
 		panic("InvalidParameter")
 	}
 	if xb < 0 || yb < 0 {
-		return math.MinInt64, math.MinInt64, tooLow
+		return math.MinInt64, math.MinInt64, false
 	}
 	if xb >= diameter || yb >= diameter {
-		return math.MaxInt64, math.MaxInt64, tooHigh
+		return math.MaxInt64, math.MaxInt64, false
 	}
-	return xb, yb, isValid
+	return xb, yb, true
 }
 
 func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 	var (
+		valid                      bool
 		bestPoint, otherPoint      *Point
-		xb, yb, side, state        int64
+		xb, yb, side               int64
 		hypotenuse, bestHypotenuse float64
 	)
 	xbStart, ybStart := calculateBucket(originPoint.X, originPoint.Y, int64(len(g.buckets)))
@@ -188,8 +181,8 @@ func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 			if side == 0 && distance != 1 {
 				continue
 			}
-			xb, yb, state = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
-			if state != isValid {
+			xb, yb, valid = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
+			if !valid {
 				continue
 			}
 			for i := range g.buckets[xb][yb] {
@@ -212,104 +205,111 @@ func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 	return bestPoint
 }
 
-func insertPointIntoOrderedList(p *Point, h float64, bestPoints []Point, bestHypotenuses []float64) ([]Point, []float64) {
-	for i, bestPoint := range bestPoints {
-		if bestPoint.ID == -1 {
-			bestPoints[i] = *p
-			bestHypotenuses[i] = h
-			return bestPoints, bestHypotenuses
-		}
-		if h < bestHypotenuses[i] {
-			if bestPoints[len(bestPoints)-1].ID != -1 {
-				bestPoints = append(bestPoints, Point{ID: -1})
-				bestHypotenuses = append(bestHypotenuses, 0)
-			}
-			copy(bestPoints[i+1:], bestPoints[i:])
-			bestPoints[i] = *p
-			copy(bestHypotenuses[i+1:], bestHypotenuses[i:])
-			bestHypotenuses[i] = h
-			return bestPoints, bestHypotenuses
-		}
-	}
-	return bestPoints, bestHypotenuses
-}
-
-func (g *Grid) getClosestPoints(originPoint *Point, number int64) []Point {
-	panic("doesn't work!")
-	var (
-		otherPoint          *Point
-		xb, yb, side, state int64
-		hypotenuse          float64
-	)
-	bestPoints := make([]Point, number)
-	for _, val := range bestPoints {
-		val.ID = -1
-	}
-	bestHypotenuses := make([]float64, number)
-	xbStart, ybStart := calculateBucket(originPoint.X, originPoint.Y, int64(len(g.buckets)))
-	for distance := int64(1); distance < int64(len(g.buckets)); distance++ {
-		for side = 0; side < 9; side++ {
-			if side == 0 && distance != 1 {
-				continue
-			}
-			xb, yb, state = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
-			if state != isValid {
-				continue
-			}
-			for i := range g.buckets[xb][yb] {
-				otherPoint = &g.buckets[xb][yb][i]
-				if otherPoint.ID == originPoint.ID {
-					continue
-				}
-				hypotenuse = math.Hypot(float64(originPoint.X-otherPoint.X),
-					float64(originPoint.Y-otherPoint.Y))
-				bestPoints, bestHypotenuses = insertPointIntoOrderedList(otherPoint, hypotenuse,
-					bestPoints, bestHypotenuses)
-			}
-		}
-		if bestPoints[number-1].ID != -1 {
-			break
-		}
-	}
-	return bestPoints
-}
-
 func (g *Grid) ClosestPoint(x, y int64) (Point, error) {
 	g.mtx.RLock()
-	point := g.getClosestPoint(&Point{-1, x, y})
+	p := g.getClosestPoint(&Point{-1, x, y})
 	g.mtx.RUnlock()
-	if point != nil {
-		return *point, nil
+	if p != nil {
+		return *p, nil
 	}
 	return Point{ID: -1}, errors.New("nothing found")
 }
 
 func (g *Grid) NearestNeighbor(id int64) (Point, error) {
 	g.mtx.RLock()
-	point, exists := g.allPoints[id]
+	p, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.RUnlock()
 		return Point{ID: -1}, errors.New("id does not exist")
 	}
-	point = g.getClosestPoint(point)
+	p = g.getClosestPoint(p)
 	g.mtx.RUnlock()
-	if point != nil {
-		return *point, nil
+	if p != nil {
+		return *p, nil
 	}
 	return Point{ID: -1}, errors.New("nothing found")
 }
 
+type distanceVectors struct {
+	points    []Point
+	distances []float64
+}
+
+func createDistanceVectors(origin *Point, queryPoints []Point) distanceVectors {
+	dv := distanceVectors{
+		points:    queryPoints,
+		distances: make([]float64, len(queryPoints)),
+	}
+	for i := range queryPoints {
+		dv.distances[i] = math.Hypot(float64(origin.X-queryPoints[i].X),
+			float64(origin.Y-queryPoints[i].Y))
+	}
+	return dv
+}
+
+func (dv distanceVectors) Len() int {
+	return len(dv.distances)
+}
+
+func (dv distanceVectors) Swap(i, j int) {
+	dv.points[i], dv.points[j] = dv.points[j], dv.points[i]
+	dv.distances[i], dv.distances[j] = dv.distances[j], dv.distances[i]
+}
+
+func (dv distanceVectors) Less(i, j int) bool {
+	return dv.distances[i] < dv.distances[j]
+}
+
 func (g *Grid) NearestNeighbors(id, num int64) ([]Point, error) {
 	g.mtx.RLock()
-	point, exists := g.allPoints[id]
+	origin, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.RUnlock()
 		return []Point{}, errors.New("id does not exist")
 	}
-	points := g.getClosestPoints(point, num)
+	xbStart, ybStart := calculateBucket(origin.X, origin.Y, int64(len(g.buckets)))
+	var points []Point
+	if len(g.buckets[xbStart][ybStart]) > 1 {
+		points = make([]Point, len(g.buckets[xbStart][ybStart])-1)
+		for i := range g.buckets[xbStart][ybStart] {
+			if g.buckets[xbStart][ybStart][i].ID != id {
+				points[i] = g.buckets[xbStart][ybStart][i]
+			}
+		}
+	}
+	distanceVectors := createDistanceVectors(origin, points)
+	sort.Sort(distanceVectors)
+	points = distanceVectors.points
+	if int64(len(points)) >= num {
+		return points[:num], nil
+	}
+	var (
+		valid        bool
+		otherPoints  []Point
+		xb, yb, side int64
+	)
+	for distance := int64(1); distance < int64(len(g.buckets)); distance++ {
+		otherPoints = []Point{}
+		for side = 1; side < 9; side++ {
+			xb, yb, valid = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
+			if !valid {
+				continue
+			}
+			if len(g.buckets[xb][yb]) > 0 {
+				otherPoints = append(otherPoints, g.buckets[xb][yb]...)
+			}
+		}
+		distanceVectors = createDistanceVectors(origin, otherPoints)
+		sort.Sort(distanceVectors)
+		points = append(points, distanceVectors.points...)
+		if int64(len(points)) >= num {
+			g.mtx.RUnlock()
+			return points[:num], nil
+		}
+	}
 	g.mtx.RUnlock()
 	if len(points) != 0 {
-		return points, nil
+		return points, errors.New("ran out of data - not enough neighbors")
 	}
 	return points, errors.New("nothing found")
 }
