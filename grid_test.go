@@ -2,7 +2,13 @@ package spatialindex
 
 import (
 	"math"
+	"math/rand"
+	"runtime"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/demskie/simplesync"
 )
 
 const (
@@ -47,9 +53,59 @@ func BenchmarkGridNeighbor(b *testing.B) {
 	}
 }
 
-func BenchmarkGridMutation(b *testing.B) {
-	grid := NewGrid(oneMillion)
+// BUG: Do these results make sense?
+func BenchmarkGridInsertion(b *testing.B) {
+	data := getUniformRandomData(oneMillion)
+	b.ResetTimer()
+	grid := NewGrid(int32(len(data)))
+	var err error
 	for i := int64(0); i < int64(b.N); i++ {
-		grid.Add(i, i*1000, i*1000)
+		if i < int64(len(data)) {
+			err = grid.Add(i, data[i].X, data[i].Y)
+			if err != nil {
+				b.Error(err)
+			}
+			continue
+		}
+		break
 	}
+}
+
+var randomData []Point
+var randomDataMtx sync.Mutex
+
+func getUniformRandomData(num int) []Point {
+	randomDataMtx.Lock()
+	defer randomDataMtx.Unlock()
+	if len(randomData) > 0 {
+		return randomData
+	}
+	rnum := make([]*rand.Rand, runtime.NumCPU())
+	for i := range rnum {
+		rnum[i] = rand.New(rand.NewSource(int64(i) + time.Now().UnixNano()))
+	}
+	tmp := make([][]Point, runtime.NumCPU())
+	workers := simplesync.NewWorkerPool(runtime.NumCPU())
+	workers.Execute(func(i int) {
+		for x := 0; x < num/runtime.NumCPU(); x++ {
+			tmp[i] = append(tmp[i], Point{
+				ID: -1,
+				X:  rnum[i].Int63() * getPosOrNegOne(rnum[i]),
+				Y:  rnum[i].Int63() * getPosOrNegOne(rnum[i]),
+			})
+		}
+	})
+	result := []Point{}
+	for _, val := range tmp {
+		result = append(result, val...)
+	}
+	randomData = result
+	return randomData
+}
+
+func getPosOrNegOne(rnum *rand.Rand) int64 {
+	if rnum.Intn(2) == 0 {
+		return 1
+	}
+	return -1
 }

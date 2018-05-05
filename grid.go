@@ -111,7 +111,9 @@ func (g *Grid) Reset() {
 	g.mtx.Lock()
 	for x := range g.buckets {
 		for y := range g.buckets[x] {
-			if len(g.buckets[x][y]) != 0 {
+			if g.buckets[x][y] == nil {
+				continue
+			} else if len(g.buckets[x][y]) != 0 {
 				g.buckets[x][y] = g.buckets[x][y][:0]
 			}
 		}

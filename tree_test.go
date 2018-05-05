@@ -46,9 +46,18 @@ func BenchmarkTreeNeighbor(b *testing.B) {
 	}
 }
 
-func BenchmarkTreeMutation(b *testing.B) {
+func BenchmarkTreeInsertion(b *testing.B) {
+	data := getUniformRandomData(oneMillion)
+	b.ResetTimer()
 	tree := NewTree()
-	for i := 0; i < b.N; i++ {
-		tree.Insert(uint64(i), float64(i*12345), float64(i*12345))
+	var err error
+	for i := int64(0); i < int64(b.N); i++ {
+		if i < int64(len(data)) {
+			err = tree.Insert(uint64(i), float64(data[i].X), float64(data[i].Y))
+			if err != nil {
+				b.Error(err)
+			}
+			continue
+		}
 	}
 }
