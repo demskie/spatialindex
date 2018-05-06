@@ -37,7 +37,7 @@ func main() {
 ```
 
 Benchmark results (with evenly spaced spatial data)
-```Bash
+```
 macbookZeta:~ demskie$ go test github.com/demskie/spatialindex -bench=.
 goos: darwin
 goarch: amd64
