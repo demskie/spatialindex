@@ -286,10 +286,10 @@ func (g *Grid) NearestNeighbors(id, num int64) ([]Point, error) {
 	xbStart, ybStart := calculateBucket(origin.X, origin.Y, int64(len(g.buckets)))
 	var points []Point
 	if len(g.buckets[xbStart][ybStart]) > 1 {
-		points = make([]Point, len(g.buckets[xbStart][ybStart])-1)
-		for i := range g.buckets[xbStart][ybStart] {
-			if g.buckets[xbStart][ybStart][i].ID != id {
-				points[i] = g.buckets[xbStart][ybStart][i]
+		points = make([]Point, 0, len(g.buckets[xbStart][ybStart])-1)
+		for _, obj := range g.buckets[xbStart][ybStart] {
+			if obj.ID != id {
+				points = append(points, obj)
 			}
 		}
 	}
