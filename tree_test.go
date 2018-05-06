@@ -19,8 +19,8 @@ func TestTreeLookup(t *testing.T) {
 		t.Error("Add accepted a duplicate id parameter")
 	}
 	neighbors, err := tree.NearestNeighbors(0, 99)
-	if err != nil {
-		t.Error(err)
+	if err == nil {
+		t.Error("NearestNeighbor accepted an invalid num parameter")
 	}
 	if len(neighbors) != 1 {
 		t.Errorf("returned %v neighbors", len(neighbors))
