@@ -98,5 +98,8 @@ func (t *Tree) NearestNeighbors(id uint64, num int) (results []Object, err error
 		}
 	}
 	t.mtx.RUnlock()
+	if len(results) != num {
+		return results, errors.New("not enough neighbors")
+	}
 	return results, nil
 }
