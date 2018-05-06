@@ -16,7 +16,13 @@ const (
 )
 
 func TestGrid(t *testing.T) {
+	if NewGrid(0) != nil {
+		t.Error("NewGrid accepted an invalid input parameter")
+	}
 	grid := NewGrid(oneMillion)
+	if grid.Add(-9, 123, 123) == nil {
+		t.Error("Add accepted an invalid input parameter")
+	}
 	grid.Add(0, 123, 123)
 	grid.Add(1, 135, 135)
 	if grid.Add(1, 135, 135) == nil {
@@ -32,6 +38,17 @@ func TestGrid(t *testing.T) {
 	err = grid.Add(6, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		t.Error(err)
+	}
+	grid.Move(3, 321, 321)
+	if grid.Move(-1, 0, 0) == nil {
+		t.Error("invalid id parameter was used without error")
+	}
+	err = grid.Move(3, 321, 321)
+	if err != nil {
+		t.Error(err)
+	}
+	if grid.Delete(99) == nil {
+		t.Error("Delete accepted an id that does not exist")
 	}
 }
 
@@ -53,11 +70,10 @@ func BenchmarkGridNeighbor(b *testing.B) {
 	}
 }
 
-// BUG: Do these results make sense?
 func BenchmarkGridInsertion(b *testing.B) {
 	data := getUniformRandomData(oneMillion)
 	b.ResetTimer()
-	grid := NewGrid(int32(len(data)))
+	grid := NewGrid(len(data))
 	var err error
 	for i := int64(0); i < int64(b.N); i++ {
 		if i < int64(len(data)) {

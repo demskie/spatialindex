@@ -7,6 +7,7 @@ import (
 	"github.com/dhconnelly/rtreego"
 )
 
+// Tree is a wrapper struct around dhconnelly/rtreego.Rtree
 type Tree struct {
 	rt     *rtreego.Rtree
 	mtx    *sync.RWMutex
@@ -22,6 +23,7 @@ func (sp *customSpatial) Bounds() *rtreego.Rect {
 	return sp.rct
 }
 
+// NewTree returns a new wrapper struct
 func NewTree() *Tree {
 	return &Tree{
 		rt:     rtreego.NewTree(2, 2, 3),
@@ -30,7 +32,8 @@ func NewTree() *Tree {
 	}
 }
 
-func (t *Tree) Insert(id uint64, x, y float64) error {
+// Add creates and inserts a new Point into the RTree
+func (t *Tree) Add(id uint64, x, y float64) error {
 	rect, err := rtreego.NewRect(rtreego.Point{x, y}, []float64{0.01, 0.01})
 	if err != nil {
 		return err
@@ -39,7 +42,7 @@ func (t *Tree) Insert(id uint64, x, y float64) error {
 	_, exists := t.objMap[id]
 	if exists {
 		t.mtx.Unlock()
-		return errors.New("duplicate n value")
+		return errors.New("id already exists")
 	}
 	newSpatial := &customSpatial{rect, id}
 	t.objMap[id] = newSpatial
@@ -48,6 +51,7 @@ func (t *Tree) Insert(id uint64, x, y float64) error {
 	return nil
 }
 
+// Delete removes a specific Point from the RTree
 func (t *Tree) Delete(id uint64) error {
 	t.mtx.Lock()
 	obj, exists := t.objMap[id]
@@ -61,19 +65,21 @@ func (t *Tree) Delete(id uint64) error {
 	return nil
 }
 
+// Object is the base type that gets inserted into the RTree
 type Object struct {
 	ID   uint64
 	X, Y float64
 }
 
-func (t *Tree) NearestNeighbors(id uint64, number int) (results []Object, err error) {
+// NearestNeighbors returns a list of Objects closest to the Point with the specified id
+func (t *Tree) NearestNeighbors(id uint64, num int) (results []Object, err error) {
 	t.mtx.RLock()
 	obj, exists := t.objMap[id]
 	if !exists {
 		t.mtx.RUnlock()
-		return []Object{}, errors.New("n value does not exist")
+		return []Object{}, errors.New("id does not exist")
 	}
-	spatials := t.rt.NearestNeighbors(1+number, rtreego.Point{
+	spatials := t.rt.NearestNeighbors(1+num, rtreego.Point{
 		obj.rct.PointCoord(0),
 		obj.rct.PointCoord(1),
 	})

@@ -5,32 +5,30 @@ import (
 	"math"
 	"sort"
 	"sync"
-	//"fmt"
 )
 
+// Point represents an object in 2D space
 type Point struct {
 	ID, X, Y int64
 }
 
+// Grid is a statically set series of slices that Points get put into
 type Grid struct {
 	mtx       *sync.RWMutex
 	buckets   [][][]Point
 	allPoints map[int64]*Point
 }
 
-func NewGrid(numberOfSquares int32) *Grid {
+// NewGrid returns a Grid without preallocating nested slices
+func NewGrid(numberOfSquares int) *Grid {
 	if numberOfSquares < 4 {
 		return nil
 	}
-	g := &Grid{
+	return &Grid{
 		mtx:       &sync.RWMutex{},
-		buckets:   make([][][]Point, int32(math.Sqrt(float64(numberOfSquares)))),
+		buckets:   make([][][]Point, int(math.Sqrt(float64(numberOfSquares)))),
 		allPoints: make(map[int64]*Point, numberOfSquares),
 	}
-	for x := range g.buckets {
-		g.buckets[x] = make([][]Point, len(g.buckets))
-	}
-	return g
 }
 
 func calculateBucket(x, y, diameter int64) (xb, yb int64) {
@@ -40,6 +38,7 @@ func calculateBucket(x, y, diameter int64) (xb, yb int64) {
 	return xb, yb
 }
 
+// Add inserts a new Point into the appropriate bucket if it doesn't already exist
 func (g *Grid) Add(id, x, y int64) error {
 	if id < 0 {
 		return errors.New("id is a negative number")
@@ -52,12 +51,16 @@ func (g *Grid) Add(id, x, y int64) error {
 	}
 	xb, yb := calculateBucket(x, y, int64(len(g.buckets)))
 	newPoint := Point{id, x, y}
+	if g.buckets[xb] == nil {
+		g.buckets[xb] = make([][]Point, len(g.buckets))
+	}
 	g.buckets[xb][yb] = append(g.buckets[xb][yb], newPoint)
 	g.allPoints[id] = &newPoint
 	g.mtx.Unlock()
 	return nil
 }
 
+// Move will remove an existing Point and insert a new one into the appropriate bucket
 func (g *Grid) Move(id, x, y int64) error {
 	g.mtx.Lock()
 	point, exists := g.allPoints[id]
@@ -71,6 +74,9 @@ func (g *Grid) Move(id, x, y int64) error {
 	}
 	xb1, yb1 := calculateBucket(point.X, point.Y, int64(len(g.buckets)))
 	xb2, yb2 := calculateBucket(x, y, int64(len(g.buckets)))
+	if g.buckets[xb2] == nil {
+		g.buckets[xb2] = make([][]Point, len(g.buckets))
+	}
 	if xb1 != xb2 || yb1 != yb2 {
 		for i := range g.buckets[xb1][yb1] {
 			if g.buckets[xb1][yb1][i].ID == point.ID {
@@ -87,11 +93,12 @@ func (g *Grid) Move(id, x, y int64) error {
 	return nil
 }
 
+// Delete removes the existing Point
 func (g *Grid) Delete(id int64) error {
 	g.mtx.Lock()
 	point, exists := g.allPoints[id]
 	if !exists {
-		g.mtx.RUnlock()
+		g.mtx.Unlock()
 		return errors.New("id does not exist")
 	}
 	xb, yb := calculateBucket(point.X, point.Y, int64(len(g.buckets)))
@@ -107,6 +114,7 @@ func (g *Grid) Delete(id int64) error {
 	return nil
 }
 
+// Reset will empty all buckets
 func (g *Grid) Reset() {
 	g.mtx.Lock()
 	for x := range g.buckets {
@@ -184,7 +192,7 @@ func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 				continue
 			}
 			xb, yb, valid = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
-			if !valid {
+			if !valid || g.buckets[xb] == nil || g.buckets[xb][yb] == nil {
 				continue
 			}
 			for i := range g.buckets[xb][yb] {
@@ -207,6 +215,8 @@ func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 	return bestPoint
 }
 
+// ClosestPoint will return the closest Point regardless of proximity
+// Please note that the returned Point could be in the same position
 func (g *Grid) ClosestPoint(x, y int64) (Point, error) {
 	g.mtx.RLock()
 	p := g.getClosestPoint(&Point{-1, x, y})
@@ -217,6 +227,7 @@ func (g *Grid) ClosestPoint(x, y int64) (Point, error) {
 	return Point{ID: -1}, errors.New("nothing found")
 }
 
+// NearestNeighbor will return the first adjacent Point
 func (g *Grid) NearestNeighbor(id int64) (Point, error) {
 	g.mtx.RLock()
 	p, exists := g.allPoints[id]
@@ -262,6 +273,9 @@ func (dv distanceVectors) Less(i, j int) bool {
 	return dv.distances[i] < dv.distances[j]
 }
 
+// NearestNeighbors returns multiple adjacent Points in order of proximity.
+// If unable to fulfill the requested number it will return a slice containing
+// an unspecified number of Points and a non-nill error value.
 func (g *Grid) NearestNeighbors(id, num int64) ([]Point, error) {
 	g.mtx.RLock()
 	origin, exists := g.allPoints[id]
