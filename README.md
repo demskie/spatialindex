@@ -4,16 +4,16 @@ NewTree is a wrapper around https://github.com/dhconnelly/rtreego
 
 ```Go
 func main() {
-	tree := spatialindex.NewTree()
-	tree.Add(0, 123, 123)
-	tree.Add(1, 1234, 1234)
-	tree.Add(2, 12345, 12345)
-	results, err := tree.NearestNeighbors(0, 2)
-	if err != nil {
-		fmt.Printf("result: %v\n", err)
-	} else {
-		fmt.Printf("results: %+v\n", results)
-	}
+    tree := spatialindex.NewTree()
+    tree.Add(0, 123, 123)
+    tree.Add(1, 1234, 1234)
+    tree.Add(2, 12345, 12345)
+    results, err := tree.NearestNeighbors(0, 2)
+    if err != nil {
+        fmt.Printf("result: %v\n", err)
+    } else {
+        fmt.Printf("results: %+v\n", results)
+    }
 }
 // result: [{ID:1 X:1234 Y:1234} {ID:2 X:12345 Y:12345}]
 ```
@@ -22,16 +22,16 @@ NewGrid is an overly simplified nearest neighbor implementation. It is only vali
 
 ```Go
 func main() {
-	grid := spatialindex.NewGrid(1000000)
-	grid.Add(0, 123, 123)
-	grid.Add(1, 1234, 1234)
-	grid.Add(2, 12345, 12345)
-	results, err := grid.NearestNeighbors(0, 2)
-	if err != nil {
-		fmt.Printf("result: %v\n", err)
-	} else {
-		fmt.Printf("result: %+v\n", results)
-	}
+    grid := spatialindex.NewGrid(1000000)
+    grid.Add(0, 123, 123)
+    grid.Add(1, 1234, 1234)
+    grid.Add(2, 12345, 12345)
+    results, err := grid.NearestNeighbors(0, 2)
+    if err != nil {
+        fmt.Printf("result: %v\n", err)
+    } else {
+        fmt.Printf("result: %+v\n", results)
+    }
 }
 // result: [{ID:1 X:1234 Y:1234} {ID:2 X:12345 Y:12345}]
 ```
