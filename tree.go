@@ -7,6 +7,12 @@ import (
 	"github.com/dhconnelly/rtreego"
 )
 
+// Package level errors
+var (
+	ErrInvalidID = errors.New("id already exists")
+	ErrNotEnoughNeighbors = errors.New("not enough neighbors")
+)
+
 // Tree is a wrapper struct around dhconnelly/rtreego.Rtree
 type Tree struct {
 	rt     *rtreego.Rtree
@@ -42,7 +48,7 @@ func (t *Tree) Add(id uint64, x, y float64) error {
 	_, exists := t.objMap[id]
 	if exists {
 		t.mtx.Unlock()
-		return errors.New("id already exists")
+		return ErrInvalidID
 	}
 	newSpatial := &customSpatial{rect, id}
 	t.objMap[id] = newSpatial
@@ -57,7 +63,7 @@ func (t *Tree) Delete(id uint64) error {
 	obj, exists := t.objMap[id]
 	if !exists {
 		t.mtx.Unlock()
-		return errors.New("id does not exist")
+		return ErrInvalidID
 	}
 	delete(t.objMap, id)
 	t.rt.Delete(obj)
@@ -77,7 +83,7 @@ func (t *Tree) NearestNeighbors(id uint64, num int) (results []Object, err error
 	obj, exists := t.objMap[id]
 	if !exists {
 		t.mtx.RUnlock()
-		return []Object{}, errors.New("id does not exist")
+		return []Object{}, ErrInvalidID
 	}
 	spatials := t.rt.NearestNeighbors(1+num, rtreego.Point{
 		obj.rct.PointCoord(0),
@@ -99,7 +105,7 @@ func (t *Tree) NearestNeighbors(id uint64, num int) (results []Object, err error
 	}
 	t.mtx.RUnlock()
 	if len(results) != num {
-		return results, errors.New("not enough neighbors")
+		return results, ErrNotEnoughNeighbors
 	}
 	return results, nil
 }
