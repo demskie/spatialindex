@@ -9,14 +9,15 @@ import (
 
 // Point represents an object in 2D space
 type Point struct {
-	ID, X, Y int64
+	ID   uint64
+	X, Y int64
 }
 
 // Grid is a statically set series of slices that Points get put into
 type Grid struct {
 	mtx       *sync.RWMutex
 	buckets   [][][]Point
-	allPoints map[int64]*Point
+	allPoints map[uint64]*Point
 }
 
 // NewGrid returns a Grid without preallocating nested slices
@@ -27,7 +28,7 @@ func NewGrid(numberOfSquares int) *Grid {
 	return &Grid{
 		mtx:       &sync.RWMutex{},
 		buckets:   make([][][]Point, int(math.Sqrt(float64(numberOfSquares)))),
-		allPoints: make(map[int64]*Point, numberOfSquares),
+		allPoints: make(map[uint64]*Point, numberOfSquares),
 	}
 }
 
@@ -39,7 +40,7 @@ func calculateBucket(x, y, diameter int64) (xb, yb int64) {
 }
 
 // Add inserts a new Point into the appropriate bucket if it doesn't already exist
-func (g *Grid) Add(id, x, y int64) error {
+func (g *Grid) Add(id uint64, x, y int64) error {
 	if id < 0 {
 		return errors.New("id is a negative number")
 	}
@@ -61,7 +62,7 @@ func (g *Grid) Add(id, x, y int64) error {
 }
 
 // Move will remove an existing Point and insert a new one into the appropriate bucket
-func (g *Grid) Move(id, x, y int64) error {
+func (g *Grid) Move(id uint64, x, y int64) error {
 	g.mtx.Lock()
 	point, exists := g.allPoints[id]
 	if !exists {
@@ -94,7 +95,7 @@ func (g *Grid) Move(id, x, y int64) error {
 }
 
 // Delete removes the existing Point
-func (g *Grid) Delete(id int64) error {
+func (g *Grid) Delete(id uint64) error {
 	g.mtx.Lock()
 	point, exists := g.allPoints[id]
 	if !exists {
@@ -126,7 +127,7 @@ func (g *Grid) Reset() {
 			}
 		}
 	}
-	g.allPoints = map[int64]*Point{}
+	g.allPoints = map[uint64]*Point{}
 	g.mtx.Unlock()
 }
 
@@ -178,7 +179,7 @@ func adjustBucket(side, xb, yb, distance, diameter int64) (int64, int64, bool) {
 	return xb, yb, true
 }
 
-func (g *Grid) getClosestPoint(originPoint *Point) *Point {
+func (g *Grid) getClosestPoint(originPoint *Point, checkID bool) *Point {
 	var (
 		valid                      bool
 		bestPoint, otherPoint      *Point
@@ -197,7 +198,7 @@ func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 			}
 			for i := range g.buckets[xb][yb] {
 				otherPoint = &g.buckets[xb][yb][i]
-				if otherPoint.ID == originPoint.ID {
+				if checkID && otherPoint.ID == originPoint.ID {
 					continue
 				}
 				hypotenuse = math.Hypot(float64(originPoint.X-otherPoint.X),
@@ -219,28 +220,28 @@ func (g *Grid) getClosestPoint(originPoint *Point) *Point {
 // Please note that the returned Point could be in the same position
 func (g *Grid) ClosestPoint(x, y int64) (Point, error) {
 	g.mtx.RLock()
-	p := g.getClosestPoint(&Point{-1, x, y})
+	p := g.getClosestPoint(&Point{0, x, y}, false)
 	g.mtx.RUnlock()
 	if p != nil {
 		return *p, nil
 	}
-	return Point{ID: -1}, errors.New("nothing found")
+	return Point{}, errors.New("nothing found")
 }
 
 // NearestNeighbor will return the first adjacent Point
-func (g *Grid) NearestNeighbor(id int64) (Point, error) {
+func (g *Grid) NearestNeighbor(id uint64) (Point, error) {
 	g.mtx.RLock()
 	p, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.RUnlock()
-		return Point{ID: -1}, errors.New("id does not exist")
+		return Point{}, errors.New("id does not exist")
 	}
-	p = g.getClosestPoint(p)
+	p = g.getClosestPoint(p, true)
 	g.mtx.RUnlock()
 	if p != nil {
 		return *p, nil
 	}
-	return Point{ID: -1}, errors.New("nothing found")
+	return Point{}, errors.New("nothing found")
 }
 
 type distanceVectors struct {
@@ -276,7 +277,7 @@ func (dv distanceVectors) Less(i, j int) bool {
 // NearestNeighbors returns multiple adjacent Points in order of proximity.
 // If unable to fulfill the requested number it will return a slice containing
 // an unspecified number of Points and a non-nill error value.
-func (g *Grid) NearestNeighbors(id, num int64) ([]Point, error) {
+func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 	g.mtx.RLock()
 	origin, exists := g.allPoints[id]
 	if !exists {
