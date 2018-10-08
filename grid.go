@@ -32,6 +32,14 @@ func NewGrid(numberOfSquares int) *Grid {
 	}
 }
 
+// Package level errors
+var (
+	ErrDuplicateID  = errors.New("id already exists")
+	ErrInvalidID    = errors.New("id does not exist")
+	ErrOutOfData    = errors.New("ran out of data - not enough neighbors")
+	ErrNothingFound = errors.New("nothing found")
+)
+
 func calculateBucket(x, y, diameter int64) (xb, yb int64) {
 	xb, yb = diameter/2, diameter/2
 	xb += x / (2 * (1 + (math.MaxInt64 / diameter)))
@@ -41,14 +49,11 @@ func calculateBucket(x, y, diameter int64) (xb, yb int64) {
 
 // Add inserts a new Point into the appropriate bucket if it doesn't already exist
 func (g *Grid) Add(id uint64, x, y int64) error {
-	if id < 0 {
-		return errors.New("id is a negative number")
-	}
 	g.mtx.Lock()
 	_, exists := g.allPoints[id]
 	if exists {
 		g.mtx.Unlock()
-		return errors.New("id already exists")
+		return ErrDuplicateID
 	}
 	xb, yb := calculateBucket(x, y, int64(len(g.buckets)))
 	newPoint := Point{id, x, y}
@@ -67,7 +72,7 @@ func (g *Grid) Move(id uint64, x, y int64) error {
 	point, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.Unlock()
-		return errors.New("id does not exist")
+		return ErrInvalidID
 	}
 	if point.X == x && point.Y == y {
 		g.mtx.Unlock()
@@ -100,7 +105,7 @@ func (g *Grid) Delete(id uint64) error {
 	point, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.Unlock()
-		return errors.New("id does not exist")
+		return ErrInvalidID
 	}
 	xb, yb := calculateBucket(point.X, point.Y, int64(len(g.buckets)))
 	for i := range g.buckets[xb][yb] {
@@ -225,7 +230,7 @@ func (g *Grid) ClosestPoint(x, y int64) (Point, error) {
 	if p != nil {
 		return *p, nil
 	}
-	return Point{}, errors.New("nothing found")
+	return Point{}, ErrNothingFound
 }
 
 // NearestNeighbor will return the first adjacent Point
@@ -234,14 +239,14 @@ func (g *Grid) NearestNeighbor(id uint64) (Point, error) {
 	p, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.RUnlock()
-		return Point{}, errors.New("id does not exist")
+		return Point{}, ErrInvalidID
 	}
 	p = g.getClosestPoint(p, true)
 	g.mtx.RUnlock()
 	if p != nil {
 		return *p, nil
 	}
-	return Point{}, errors.New("nothing found")
+	return Point{}, ErrNothingFound
 }
 
 type distanceVectors struct {
@@ -282,7 +287,7 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 	origin, exists := g.allPoints[id]
 	if !exists {
 		g.mtx.RUnlock()
-		return []Point{}, errors.New("id does not exist")
+		return []Point{}, ErrInvalidID
 	}
 	xbStart, ybStart := calculateBucket(origin.X, origin.Y, int64(len(g.buckets)))
 	var points []Point
@@ -326,7 +331,31 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 	}
 	g.mtx.RUnlock()
 	if len(points) != 0 {
-		return points, errors.New("ran out of data - not enough neighbors")
+		return points, ErrOutOfData
 	}
-	return points, errors.New("nothing found")
+	return points, ErrNothingFound
+}
+
+// NumberOfBuckets returns the total number of buckets
+func (g *Grid) NumberOfBuckets() int {
+	return len(g.buckets) * len(g.buckets)
+}
+
+// CopyUnderlyingBucketValues is used to return Points given a bucket number
+func (g *Grid) CopyUnderlyingBucketValues(bucket int) []Point {
+	g.mtx.RLock()
+	i := (len(g.buckets) * len(g.buckets)) / len(g.buckets)
+	if g.buckets[i] == nil {
+		g.mtx.RUnlock()
+		return nil
+	}
+	j := (len(g.buckets) * len(g.buckets)) % len(g.buckets)
+	if g.buckets[i][j] == nil {
+		g.mtx.RUnlock()
+		return nil
+	}
+	newSlice := make([]Point, len(g.buckets[i][j]))
+	copy(newSlice, g.buckets[i][j])
+	g.mtx.RUnlock()
+	return newSlice
 }
