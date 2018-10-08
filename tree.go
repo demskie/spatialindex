@@ -1,16 +1,9 @@
 package spatialindex
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/dhconnelly/rtreego"
-)
-
-// Package level errors
-var (
-	ErrInvalidID = errors.New("id already exists")
-	ErrNotEnoughNeighbors = errors.New("not enough neighbors")
 )
 
 // Tree is a wrapper struct around dhconnelly/rtreego.Rtree

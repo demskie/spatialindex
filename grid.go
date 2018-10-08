@@ -34,10 +34,10 @@ func NewGrid(numberOfSquares int) *Grid {
 
 // Package level errors
 var (
-	ErrDuplicateID  = errors.New("id already exists")
-	ErrInvalidID    = errors.New("id does not exist")
-	ErrOutOfData    = errors.New("ran out of data - not enough neighbors")
-	ErrNothingFound = errors.New("nothing found")
+	ErrDuplicateID        = errors.New("id already exists")
+	ErrInvalidID          = errors.New("id does not exist")
+	ErrNotEnoughNeighbors = errors.New("not enough neighbors")
+	ErrNothingFound       = errors.New("nothing found")
 )
 
 func calculateBucket(x, y, diameter int64) (xb, yb int64) {
@@ -331,7 +331,7 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 	}
 	g.mtx.RUnlock()
 	if len(points) != 0 {
-		return points, ErrOutOfData
+		return points, ErrNotEnoughNeighbors
 	}
 	return points, ErrNothingFound
 }
