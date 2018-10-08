@@ -20,9 +20,6 @@ func TestGrid(t *testing.T) {
 		t.Error("NewGrid accepted an invalid input parameter")
 	}
 	grid := NewGrid(oneMillion)
-	if grid.Add(-9, 123, 123) == nil {
-		t.Error("Add accepted an invalid input parameter")
-	}
 	grid.Add(0, 123, 123)
 	grid.Add(1, 135, 135)
 	if grid.Add(1, 135, 135) == nil {
@@ -40,9 +37,6 @@ func TestGrid(t *testing.T) {
 		t.Error(err)
 	}
 	grid.Move(3, 321, 321)
-	if grid.Move(-1, 0, 0) == nil {
-		t.Error("invalid id parameter was used without error")
-	}
 	err = grid.Move(3, 321, 321)
 	if err != nil {
 		t.Error(err)
@@ -75,8 +69,8 @@ func BenchmarkGridInsertion(b *testing.B) {
 	b.ResetTimer()
 	grid := NewGrid(len(data))
 	var err error
-	for i := int64(0); i < int64(b.N); i++ {
-		if i < int64(len(data)) {
+	for i := uint64(0); i < uint64(b.N); i++ {
+		if i < uint64(len(data)) {
 			err = grid.Add(i, data[i].X, data[i].Y)
 			if err != nil {
 				b.Error(err)
@@ -105,7 +99,7 @@ func getUniformRandomData(num int) []Point {
 	workers.Execute(func(i int) {
 		for x := 0; x < num/runtime.NumCPU(); x++ {
 			tmp[i] = append(tmp[i], Point{
-				ID: -1,
+				ID: 0,
 				X:  rnum[i].Int63() * getPosOrNegOne(rnum[i]),
 				Y:  rnum[i].Int63() * getPosOrNegOne(rnum[i]),
 			})
