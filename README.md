@@ -37,15 +37,16 @@ func main() {
 ```
 
 Benchmark results (with evenly spaced spatial data)
-```
-macbookZeta:~ demskie$ go test github.com/demskie/spatialindex -bench=.
-goos: darwin
-goarch: amd64
-pkg: github.com/demskie/spatialindex
-BenchmarkGridCreation-8    	     200	   8927625 ns/op
-BenchmarkGridNeighbor-8    	  100000	     12247 ns/op
-BenchmarkGridInsertion-8   	2000000000	         0.23 ns/op
-BenchmarkTreeCreation-8    	10000000	       153 ns/op
-BenchmarkTreeNeighbor-8    	30000000	        49.5 ns/op
-BenchmarkTreeInsertion-8   	  200000	     14916 ns/op
+
+```Terminal
+Intel(R) Core(TM) i5-6600K CPU @ 3.50GHz
+
+BenchmarkTreeCreation-4       10000000         192 ns/op         208 B/op          5 allocs/op
+BenchmarkGridCreation-4            100    10944119 ns/op    40132655 B/op          3 allocs/op
+
+BenchmarkTreeInsertion-4        200000       17650 ns/op        5544 B/op        204 allocs/op
+BenchmarkGridInsertion-4    2000000000        0.21 ns/op           0 B/op          0 allocs/op
+
+BenchmarkTreeNeighbor-4       50000000        29.5 ns/op           0 B/op          0 allocs/op
+BenchmarkGridNeighbor-4         100000       14484 ns/op         401 B/op          0 allocs/op
 ```
