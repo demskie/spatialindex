@@ -336,20 +336,18 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 	return points, ErrNothingFound
 }
 
-// NumberOfBuckets returns the total number of buckets
-func (g *Grid) NumberOfBuckets() int {
-	return len(g.buckets) * len(g.buckets)
-}
-
-// CopyUnderlyingBucketValues is used to return Points given a bucket number
-func (g *Grid) CopyUnderlyingBucketValues(bucket int) []Point {
+// GetUnderlyingBucket is used to return Points given a bucket number
+func (g *Grid) GetUnderlyingBucket(bucket int) []Point {
 	g.mtx.RLock()
-	i := (len(g.buckets) * len(g.buckets)) / len(g.buckets)
+	var i, j int
+	if bucket != 0 {
+		i = bucket / len(g.buckets)
+		j = bucket % len(g.buckets)
+	}
 	if g.buckets[i] == nil {
 		g.mtx.RUnlock()
 		return nil
 	}
-	j := (len(g.buckets) * len(g.buckets)) % len(g.buckets)
 	if g.buckets[i][j] == nil {
 		g.mtx.RUnlock()
 		return nil
