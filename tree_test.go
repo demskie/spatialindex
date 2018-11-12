@@ -61,7 +61,7 @@ func BenchmarkTreeNeighbor(b *testing.B) {
 }
 
 func BenchmarkTreeInsertion(b *testing.B) {
-	data := getUniformRandomData(oneMillion)
+	data := getUniformRandomData(1e6)
 	b.ResetTimer()
 	tree := NewTree()
 	var err error

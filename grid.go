@@ -21,14 +21,14 @@ type Grid struct {
 }
 
 // NewGrid returns a Grid without preallocating nested slices
-func NewGrid(numberOfSquares int) *Grid {
-	if numberOfSquares < 4 {
+func NewGrid(precision int) *Grid {
+	if precision < 1 {
 		return nil
 	}
 	return &Grid{
 		mtx:       &sync.RWMutex{},
-		buckets:   make([][][]Point, int(math.Sqrt(float64(numberOfSquares)))),
-		allPoints: make(map[uint64]*Point, numberOfSquares),
+		buckets:   make([][][]Point, precision),
+		allPoints: make(map[uint64]*Point, 0),
 	}
 }
 
@@ -37,7 +37,6 @@ var (
 	ErrDuplicateID        = errors.New("id already exists")
 	ErrInvalidID          = errors.New("id does not exist")
 	ErrNotEnoughNeighbors = errors.New("not enough neighbors")
-	ErrNothingFound       = errors.New("nothing found")
 )
 
 func calculateBucket(x, y, diameter int64) (xb, yb int64) {
@@ -230,7 +229,7 @@ func (g *Grid) ClosestPoint(x, y int64) (Point, error) {
 	if p != nil {
 		return *p, nil
 	}
-	return Point{}, ErrNothingFound
+	return Point{}, ErrNotEnoughNeighbors
 }
 
 // NearestNeighbor will return the first adjacent Point
@@ -246,7 +245,7 @@ func (g *Grid) NearestNeighbor(id uint64) (Point, error) {
 	if p != nil {
 		return *p, nil
 	}
-	return Point{}, ErrNothingFound
+	return Point{}, ErrNotEnoughNeighbors
 }
 
 type distanceVectors struct {
@@ -333,27 +332,5 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 	if len(points) != 0 {
 		return points, ErrNotEnoughNeighbors
 	}
-	return points, ErrNothingFound
-}
-
-// GetUnderlyingBucket is used to return Points given a bucket number
-func (g *Grid) GetUnderlyingBucket(bucket int) []Point {
-	g.mtx.RLock()
-	var i, j int
-	if bucket != 0 {
-		i = bucket / len(g.buckets)
-		j = bucket % len(g.buckets)
-	}
-	if g.buckets[i] == nil {
-		g.mtx.RUnlock()
-		return nil
-	}
-	if g.buckets[i][j] == nil {
-		g.mtx.RUnlock()
-		return nil
-	}
-	newSlice := make([]Point, len(g.buckets[i][j]))
-	copy(newSlice, g.buckets[i][j])
-	g.mtx.RUnlock()
-	return newSlice
+	return points, ErrNotEnoughNeighbors
 }

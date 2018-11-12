@@ -11,15 +11,11 @@ import (
 	"github.com/demskie/simplesync"
 )
 
-const (
-	oneMillion = 1000000
-)
-
 func TestGrid(t *testing.T) {
 	if NewGrid(0) != nil {
 		t.Error("NewGrid accepted an invalid input parameter")
 	}
-	grid := NewGrid(oneMillion)
+	grid := NewGrid(256)
 	grid.Add(0, 123, 123)
 	grid.Add(1, 135, 135)
 	if grid.Add(1, 135, 135) == nil {
@@ -48,12 +44,13 @@ func TestGrid(t *testing.T) {
 
 func BenchmarkGridCreation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		NewGrid(oneMillion)
+		NewGrid(256)
 	}
 }
 
 func BenchmarkGridNeighbor(b *testing.B) {
-	grid := NewGrid(oneMillion)
+	grid := NewGrid(256)
+	b.ResetTimer()
 	grid.Add(0, 123, 123)
 	grid.Add(1, 135, 135)
 	grid.Add(2, 123456789, 123456789)
@@ -65,9 +62,9 @@ func BenchmarkGridNeighbor(b *testing.B) {
 }
 
 func BenchmarkGridInsertion(b *testing.B) {
-	data := getUniformRandomData(oneMillion)
+	data := getUniformRandomData(1e6)
+	grid := NewGrid(256)
 	b.ResetTimer()
-	grid := NewGrid(len(data))
 	var err error
 	for i := uint64(0); i < uint64(b.N); i++ {
 		if i < uint64(len(data)) {
