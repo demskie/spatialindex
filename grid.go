@@ -15,19 +15,25 @@ type Point struct {
 
 // Grid is a statically set series of slices that Points get put into
 type Grid struct {
-	mtx       *sync.RWMutex
-	buckets   [][][]Point
-	allPoints map[uint64]*Point
+	mtx        *sync.RWMutex
+	minX, minY int64
+	maxX, maxY int64
+	precision  int64
+	buckets    [][]Point
+	allPoints  map[uint64]*Point
 }
 
 // NewGrid returns a Grid without preallocating nested slices
-func NewGrid(precision int) *Grid {
+func NewGrid(precision, minX, minY, maxX, maxY int64) *Grid {
 	if precision < 1 {
 		return nil
 	}
 	return &Grid{
-		mtx:       &sync.RWMutex{},
-		buckets:   make([][][]Point, precision),
+		mtx:  &sync.RWMutex{},
+		minX: minX, minY: minY,
+		maxX: maxX, maxY: maxY,
+		precision: precision,
+		buckets:   make([][]Point, precision*precision),
 		allPoints: make(map[uint64]*Point, 0),
 	}
 }
@@ -39,11 +45,26 @@ var (
 	ErrNotEnoughNeighbors = errors.New("not enough neighbors")
 )
 
-func calculateBucket(x, y, diameter int64) (xb, yb int64) {
-	xb, yb = diameter/2, diameter/2
-	xb += x / (2 * (1 + (math.MaxInt64 / diameter)))
-	yb += y / (2 * (1 + (math.MaxInt64 / diameter)))
+func (g *Grid) calculateBucket(x, y int64) (xb, yb int64) {
+	xb = g.precision / 2
+	xb += int64(float64(x) / ((float64(g.maxX) - float64(g.minX)) / float64(g.precision)))
+	if x >= g.maxX {
+		xb = g.precision - 1
+	} else if x <= g.minX {
+		xb = 0
+	}
+	yb = g.precision / 2
+	yb += int64(float64(y) / ((float64(g.maxY) - float64(g.minY)) / float64(g.precision)))
+	if y >= g.maxY {
+		yb = g.precision - 1
+	} else if y <= g.minY {
+		yb = 0
+	}
 	return xb, yb
+}
+
+func (g *Grid) getRealBucket(xb, yb int64) int64 {
+	return yb + (xb * g.precision)
 }
 
 // Add inserts a new Point into the appropriate bucket if it doesn't already exist
@@ -54,12 +75,13 @@ func (g *Grid) Add(id uint64, x, y int64) error {
 		g.mtx.Unlock()
 		return ErrDuplicateID
 	}
-	xb, yb := calculateBucket(x, y, int64(len(g.buckets)))
+	xb, yb := g.calculateBucket(x, y)
+	b := g.getRealBucket(xb, yb)
 	newPoint := Point{id, x, y}
-	if g.buckets[xb] == nil {
-		g.buckets[xb] = make([][]Point, len(g.buckets))
+	if g.buckets[b] == nil {
+		g.buckets[b] = make([]Point, 0, 1)
 	}
-	g.buckets[xb][yb] = append(g.buckets[xb][yb], newPoint)
+	g.buckets[b] = append(g.buckets[b], newPoint)
 	g.allPoints[id] = &newPoint
 	g.mtx.Unlock()
 	return nil
@@ -77,21 +99,22 @@ func (g *Grid) Move(id uint64, x, y int64) error {
 		g.mtx.Unlock()
 		return nil
 	}
-	xb1, yb1 := calculateBucket(point.X, point.Y, int64(len(g.buckets)))
-	xb2, yb2 := calculateBucket(x, y, int64(len(g.buckets)))
-	if g.buckets[xb2] == nil {
-		g.buckets[xb2] = make([][]Point, len(g.buckets))
+	xb1, yb1 := g.calculateBucket(point.X, point.Y)
+	b1 := g.getRealBucket(xb1, yb1)
+	xb2, yb2 := g.calculateBucket(x, y)
+	b2 := g.getRealBucket(xb2, yb2)
+	if g.buckets[b2] == nil {
+		g.buckets[b2] = make([]Point, 0, 1)
 	}
 	if xb1 != xb2 || yb1 != yb2 {
-		for i := range g.buckets[xb1][yb1] {
-			if g.buckets[xb1][yb1][i].ID == point.ID {
-				g.buckets[xb1][yb1] = append(g.buckets[xb1][yb1][:i],
-					g.buckets[xb1][yb1][i+1:]...)
+		for i := range g.buckets[b1] {
+			if g.buckets[b1][i].ID == point.ID {
+				g.buckets[b1] = append(g.buckets[b1][:i], g.buckets[b1][i+1:]...)
 				break
 			}
 		}
 		newPoint := Point{id, x, y}
-		g.buckets[xb2][yb2] = append(g.buckets[xb2][yb2], newPoint)
+		g.buckets[b2] = append(g.buckets[b2], newPoint)
 		g.allPoints[id] = &newPoint
 	}
 	g.mtx.Unlock()
@@ -106,11 +129,10 @@ func (g *Grid) Delete(id uint64) error {
 		g.mtx.Unlock()
 		return ErrInvalidID
 	}
-	xb, yb := calculateBucket(point.X, point.Y, int64(len(g.buckets)))
-	for i := range g.buckets[xb][yb] {
-		if g.buckets[xb][yb][i].ID == id {
-			g.buckets[xb][yb] = append(g.buckets[xb][yb][:i],
-				g.buckets[xb][yb][i+1:]...)
+	b := g.getRealBucket(g.calculateBucket(point.X, point.Y))
+	for i := range g.buckets[b] {
+		if g.buckets[b][i].ID == id {
+			g.buckets[b] = append(g.buckets[b][:i], g.buckets[b][i+1:]...)
 			break
 		}
 	}
@@ -122,13 +144,9 @@ func (g *Grid) Delete(id uint64) error {
 // Reset will empty all buckets
 func (g *Grid) Reset() {
 	g.mtx.Lock()
-	for x := range g.buckets {
-		for y := range g.buckets[x] {
-			if g.buckets[x][y] == nil {
-				continue
-			} else if len(g.buckets[x][y]) != 0 {
-				g.buckets[x][y] = g.buckets[x][y][:0]
-			}
+	for i := range g.buckets {
+		if g.buckets[i] != nil {
+			g.buckets[i] = g.buckets[i][:0]
 		}
 	}
 	g.allPoints = map[uint64]*Point{}
@@ -147,7 +165,7 @@ const (
 	bottomRight
 )
 
-func adjustBucket(side, xb, yb, distance, diameter int64) (int64, int64, bool) {
+func (g *Grid) adjustBucket(side, xb, yb, distance int64) (int64, int64, bool) {
 	switch side {
 	case center:
 		// do nothing
@@ -177,7 +195,7 @@ func adjustBucket(side, xb, yb, distance, diameter int64) (int64, int64, bool) {
 	if xb < 0 || yb < 0 {
 		return math.MinInt64, math.MinInt64, false
 	}
-	if xb >= diameter || yb >= diameter {
+	if xb >= g.precision || yb >= g.precision {
 		return math.MaxInt64, math.MaxInt64, false
 	}
 	return xb, yb, true
@@ -190,30 +208,33 @@ func (g *Grid) getClosestPoint(originPoint *Point, checkID bool) *Point {
 		xb, yb, side               int64
 		hypotenuse, bestHypotenuse float64
 	)
-	xbStart, ybStart := calculateBucket(originPoint.X, originPoint.Y, int64(len(g.buckets)))
-	for distance := int64(1); distance < int64(len(g.buckets)); distance++ {
+	xbStart, ybStart := g.calculateBucket(originPoint.X, originPoint.Y)
+	for distance := int64(1); distance < g.precision; distance++ {
 		for side = 0; side < 9; side++ {
 			if side == 0 && distance != 1 {
 				continue
 			}
-			xb, yb, valid = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
-			if !valid || g.buckets[xb] == nil || g.buckets[xb][yb] == nil {
-				continue
-			}
-			for i := range g.buckets[xb][yb] {
-				otherPoint = &g.buckets[xb][yb][i]
-				if checkID && otherPoint.ID == originPoint.ID {
-					continue
-				}
-				hypotenuse = math.Hypot(float64(originPoint.X-otherPoint.X),
-					float64(originPoint.Y-otherPoint.Y))
-				if hypotenuse < bestHypotenuse || bestHypotenuse == 0 {
-					bestHypotenuse = hypotenuse
-					bestPoint = otherPoint
+			xb, yb, valid = g.adjustBucket(side, xbStart, ybStart, distance)
+			if valid {
+				b := g.getRealBucket(xb, yb)
+				for i := range g.buckets[b] {
+					otherPoint = &g.buckets[b][i]
+					if checkID && otherPoint.ID == originPoint.ID {
+						continue
+					}
+					hypotenuse = math.Hypot(float64(originPoint.X-otherPoint.X),
+						float64(originPoint.Y-otherPoint.Y))
+					if hypotenuse < bestHypotenuse || bestHypotenuse == 0 {
+						bestHypotenuse = hypotenuse
+						bestPoint = otherPoint
+					}
 				}
 			}
 		}
 		if bestPoint != nil {
+			if distance > g.precision {
+				return nil
+			}
 			break
 		}
 	}
@@ -288,11 +309,12 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 		g.mtx.RUnlock()
 		return []Point{}, ErrInvalidID
 	}
-	xbStart, ybStart := calculateBucket(origin.X, origin.Y, int64(len(g.buckets)))
+	xbStart, ybStart := g.calculateBucket(origin.X, origin.Y)
+	b := g.getRealBucket(xbStart, ybStart)
 	var points []Point
-	if len(g.buckets[xbStart][ybStart]) > 1 {
-		points = make([]Point, 0, len(g.buckets[xbStart][ybStart])-1)
-		for _, obj := range g.buckets[xbStart][ybStart] {
+	if len(g.buckets[b]) > 1 {
+		points = make([]Point, 0, len(g.buckets[b])-1)
+		for _, obj := range g.buckets[b] {
 			if obj.ID != id {
 				points = append(points, obj)
 			}
@@ -309,15 +331,16 @@ func (g *Grid) NearestNeighbors(id uint64, num int64) ([]Point, error) {
 		otherPoints  []Point
 		xb, yb, side int64
 	)
-	for distance := int64(1); distance < int64(len(g.buckets)); distance++ {
+	for distance := int64(1); distance < g.precision; distance++ {
 		otherPoints = []Point{}
 		for side = 1; side < 9; side++ {
-			xb, yb, valid = adjustBucket(side, xbStart, ybStart, distance, int64(len(g.buckets)))
+			xb, yb, valid = g.adjustBucket(side, xbStart, ybStart, distance)
+			b := g.getRealBucket(xb, yb)
 			if !valid {
 				continue
 			}
-			if len(g.buckets[xb][yb]) > 0 {
-				otherPoints = append(otherPoints, g.buckets[xb][yb]...)
+			if len(g.buckets[b]) > 0 {
+				otherPoints = append(otherPoints, g.buckets[b]...)
 			}
 		}
 		distanceVectors = createDistanceVectors(origin, otherPoints)

@@ -12,10 +12,10 @@ import (
 )
 
 func TestGrid(t *testing.T) {
-	if NewGrid(0) != nil {
+	if NewGrid(0, math.MinInt64, math.MinInt64, math.MaxInt64, math.MaxInt64) != nil {
 		t.Error("NewGrid accepted an invalid input parameter")
 	}
-	grid := NewGrid(256)
+	grid := NewGrid(512, math.MinInt64, math.MinInt64, math.MaxInt64, math.MaxInt64)
 	grid.Add(0, 123, 123)
 	grid.Add(1, 135, 135)
 	if grid.Add(1, 135, 135) == nil {
@@ -44,12 +44,12 @@ func TestGrid(t *testing.T) {
 
 func BenchmarkGridCreation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		NewGrid(256)
+		NewGrid(512, math.MinInt64, math.MinInt64, math.MaxInt64, math.MaxInt64)
 	}
 }
 
 func BenchmarkGridNeighbor(b *testing.B) {
-	grid := NewGrid(256)
+	grid := NewGrid(512, math.MinInt64, math.MinInt64, math.MaxInt64, math.MaxInt64)
 	b.ResetTimer()
 	grid.Add(0, 123, 123)
 	grid.Add(1, 135, 135)
@@ -63,7 +63,7 @@ func BenchmarkGridNeighbor(b *testing.B) {
 
 func BenchmarkGridInsertion(b *testing.B) {
 	data := getUniformRandomData(1e6)
-	grid := NewGrid(256)
+	grid := NewGrid(512, math.MinInt64, math.MinInt64, math.MaxInt64, math.MaxInt64)
 	b.ResetTimer()
 	var err error
 	for i := uint64(0); i < uint64(b.N); i++ {
